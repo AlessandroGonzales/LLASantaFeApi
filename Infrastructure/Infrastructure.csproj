@@ -18,9 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="DependecyInjection\" />
     <Folder Include="ExternalServices\" />
-    <Folder Include="Repositories\" />
   </ItemGroup>
 
   <ItemGroup>
