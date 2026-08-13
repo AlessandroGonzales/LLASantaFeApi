@@ -1,14 +1,25 @@
-﻿namespace Infrastructure.Persistence.Entities;
+﻿using System;
+using System.Collections.Generic;
+
+namespace Infrastructure.Persistence.Entities;
 
 public partial class SolicitudesCiudadana
 {
     public Guid Id { get; set; }
+
     public Guid UsuarioId { get; set; }
+
     public string Motivo { get; set; } = null!;
+
     public string Mensaje { get; set; } = null!;
+
     public string? PdfUrl { get; set; }
+
     public bool Aceptacion { get; set; }
+
     public DateTime CreatedAt { get; set; }
+
     public DateTime UpdatedAt { get; set; }
+
     public virtual Usuario Usuario { get; set; } = null!;
 }

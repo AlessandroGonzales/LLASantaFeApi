@@ -1,9 +1,11 @@
 using Application.DependencyInjection;
 using Infrastructure.DependencyInjection;
+using Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.ResponseCompression; // Requerido para la optimización
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -13,6 +15,9 @@ builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
     .AddEnvironmentVariables();
+
+builder.Services.AddDbContextPool<LLASantaFeDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Configuración de límites para subida de archivos (fotos de perfil, comprobantes, etc.)
 builder.WebHost.ConfigureKestrel(serverOptions =>
@@ -42,14 +47,12 @@ builder.Services.AddResponseCompression(options =>
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
 
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-});
-
 // Filtrado de logs para no saturar la consola
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
+
+builder.Services.Configure<Application.Authentication.JwtSettings>(
+    builder.Configuration.GetSection("JwtSettings"));
 
 builder.Services.AddAuthentication(options =>
 {

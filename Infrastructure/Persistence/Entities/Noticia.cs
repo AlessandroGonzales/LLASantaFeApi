@@ -1,4 +1,11 @@
-﻿namespace Infrastructure.Persistence.Entities;
+﻿using System;
+using System.Collections.Generic;
+
+namespace Infrastructure.Persistence.Entities;
+
+/// <summary>
+/// Noticias oficiales - optimizado para feeds por fecha y ciudad
+/// </summary>
 public partial class Noticia
 {
     public Guid Id { get; set; }

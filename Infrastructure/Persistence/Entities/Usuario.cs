@@ -1,4 +1,11 @@
-﻿namespace Infrastructure.Persistence.Entities;
+﻿using System;
+using System.Collections.Generic;
+
+namespace Infrastructure.Persistence.Entities;
+
+/// <summary>
+/// Usuarios registrados en la aplicación
+/// </summary>
 public partial class Usuario
 {
     public Guid Id { get; set; }
@@ -48,8 +55,6 @@ public partial class Usuario
     public virtual ICollection<Usuario> InverseCreatedByNavigation { get; set; } = new List<Usuario>();
 
     public virtual ICollection<Noticia> Noticia { get; set; } = new List<Noticia>();
-
-    public virtual ICollection<Notificacione> Notificaciones { get; set; } = new List<Notificacione>();
 
     public virtual Role? Rol { get; set; }
 

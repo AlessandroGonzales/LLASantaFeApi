@@ -1,7 +1,7 @@
 ﻿
 namespace Domain.Entities;
 
-public  class Usuario
+public class Usuario
 {
     public Guid Id { get; set; }
     public string Nombre { get; set; } = null!;
@@ -22,6 +22,7 @@ public  class Usuario
     public DateTime UpdatedAt { get; set; }
     public Guid? CreatedBy { get; set; }
     public Guid? RolId { get; set; }
+    public string? RoleNombre { get; set; } 
     public virtual Role? Rol { get; set; }
     public virtual Usuario? CreatedByNavigation { get; set; }
     public virtual ICollection<Encuesta> Encuesta { get; set; } = new List<Encuesta>();

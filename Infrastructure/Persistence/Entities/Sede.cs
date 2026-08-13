@@ -1,4 +1,7 @@
-﻿namespace Infrastructure.Persistence.Entities;
+﻿using System;
+using System.Collections.Generic;
+
+namespace Infrastructure.Persistence.Entities;
 
 public partial class Sede
 {
@@ -18,13 +21,13 @@ public partial class Sede
 
     public decimal? Longitud { get; set; }
 
-    public string? ImagenUrl { get; set; }
-
     public Guid? DepartamentoId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+
+    public string? ImagenUrl { get; set; }
 
     public virtual Departamento? Departamento { get; set; }
 }

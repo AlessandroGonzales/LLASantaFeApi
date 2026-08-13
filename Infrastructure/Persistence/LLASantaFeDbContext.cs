@@ -1,4 +1,6 @@
-﻿using Infrastructure.Persistence.Entities;
+﻿using System;
+using System.Collections.Generic;
+using Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence;
@@ -41,10 +43,6 @@ public partial class LLASantaFeDbContext : DbContext
     public virtual DbSet<SolicitudesCiudadana> SolicitudesCiudadanas { get; set; }
 
     public virtual DbSet<Usuario> Usuarios { get; set; }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=LLASantaFe;Username=postgres;Password=");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -281,29 +279,16 @@ public partial class LLASantaFeDbContext : DbContext
 
             entity.ToTable("notificaciones");
 
-            entity.HasIndex(e => new { e.UsuarioId, e.Leida }, "idx_notificaciones_usuario").HasFilter("(leida = false)");
-
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")
                 .HasColumnName("id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
-            entity.Property(e => e.Fecha)
-                .HasDefaultValueSql("now()")
-                .HasColumnName("fecha");
-            entity.Property(e => e.Leida)
-                .HasDefaultValue(false)
-                .HasColumnName("leida");
             entity.Property(e => e.Mensaje).HasColumnName("mensaje");
             entity.Property(e => e.Tipo).HasColumnName("tipo");
             entity.Property(e => e.Titulo).HasColumnName("titulo");
-            entity.Property(e => e.UsuarioId).HasColumnName("usuario_id");
-
-            entity.HasOne(d => d.Usuario).WithMany(p => p.Notificaciones)
-                .HasForeignKey(d => d.UsuarioId)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("notificaciones_usuario_id_fkey");
+            entity.Property(e => e.Url).HasColumnName("url");
         });
 
         modelBuilder.Entity<Propuesta>(entity =>
