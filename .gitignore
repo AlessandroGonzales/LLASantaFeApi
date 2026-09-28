@@ -482,3 +482,32 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local SDK, scratch databases and developer-only secrets
+.tools/
+.artifacts/
+**/appsettings.Local.json
+
+# Secretos, credenciales exportadas y datos operativos locales
+.env.*
+!.env.example
+**/secrets.json
+**/credentials.json
+**/token.json
+**/client_secret*.json
+**/*credentials*.local.json
+**/appsettings.*.Local.json
+*.pfx
+*.p12
+*.pem
+*.key
+*.jks
+*.publishsettings
+*.pubxml
+*.dump
+*.backup
+*.bak
+*.sql.gz
+*.sql.zip
+backups/
+uploads/

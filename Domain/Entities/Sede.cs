@@ -11,7 +11,7 @@
         public decimal? Latitud { get; set; }
         public decimal? Longitud { get; set; }
         public string? ImagenUrl { get; set; }
-        public Guid? DepartamentoId { get; set; }
+        public Guid? CiudadId { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public virtual Departamento? Departamento { get; set; }

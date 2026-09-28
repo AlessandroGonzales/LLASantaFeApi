@@ -25,11 +25,7 @@ namespace Application.DependencyInjection
             services.AddScoped<ISolicitudesCiudadanaAppService, SolicitudesCiudadanaAppService>();
             services.AddScoped<IUsuarioAppService, UsuarioAppService>();
 
-            // Servicios transversales
-            // services.AddScoped<IFileStorageService, LocalFileStorageService>();
-
-            // JwtService registrado una sola vez y como Scoped (es más seguro si maneja dependencias por request)
-            services.AddScoped<JwtService>();
+            services.AddSingleton(TimeProvider.System);
 
             return services;
         }

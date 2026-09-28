@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "API - Presentation",
+    "Projects": [
+      {
+        "Path": "Presentation\\Presentation.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

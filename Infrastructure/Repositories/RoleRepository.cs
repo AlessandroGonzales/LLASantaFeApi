@@ -21,7 +21,7 @@ namespace Infrastructure.Repositories
                 .Select( r =>  new Role{
                     Nombre = r.Nombre, Id = r.Id })
                 .FirstOrDefaultAsync(cancellationToken);
-            return rol   ;
+            return rol ?? throw new InvalidOperationException("No está configurado el rol requerido.");
         }
     }
 }

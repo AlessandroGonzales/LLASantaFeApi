@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -396,15 +396,13 @@ public partial class LLASantaFeDbContext : DbContext
 
             entity.ToTable("sedes");
 
-            entity.HasIndex(e => e.DepartamentoId, "idx_sedes_departamento");
-
             entity.Property(e => e.Id)
                 .HasDefaultValueSql("uuid_generate_v4()")
                 .HasColumnName("id");
+            entity.Property(e => e.CiudadId).HasColumnName("ciudad_id");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("created_at");
-            entity.Property(e => e.DepartamentoId).HasColumnName("departamento_id");
             entity.Property(e => e.Direccion).HasColumnName("direccion");
             entity.Property(e => e.Email).HasColumnName("email");
             entity.Property(e => e.Horario).HasColumnName("horario");
@@ -423,10 +421,10 @@ public partial class LLASantaFeDbContext : DbContext
                 .HasDefaultValueSql("now()")
                 .HasColumnName("updated_at");
 
-            entity.HasOne(d => d.Departamento).WithMany(p => p.Sedes)
-                .HasForeignKey(d => d.DepartamentoId)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("sedes_departamento_id_fkey");
+            entity.HasOne(d => d.Ciudad).WithMany(p => p.Sedes)
+                .HasForeignKey(d => d.CiudadId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("sedes_ciudad_id_fkey");
         });
 
         modelBuilder.Entity<SolicitudesAfiliacion>(entity =>
@@ -500,7 +498,6 @@ public partial class LLASantaFeDbContext : DbContext
 
             entity.HasIndex(e => e.CiudadId, "idx_usuarios_ciudad").HasFilter("(deleted_at IS NULL)");
 
-            entity.HasIndex(e => e.Email, "idx_usuarios_email");
 
             entity.HasIndex(e => e.Email, "usuarios_email_key").IsUnique();
 
@@ -550,6 +547,81 @@ public partial class LLASantaFeDbContext : DbContext
                 .HasConstraintName("usuarios_rol_id_fkey");
         });
 
+        // Reglas adicionales de los scripts SQL 001 y 002.
+
+
+        modelBuilder.Entity<Usuario>(entity =>
+        {
+            entity.Property(e => e.EmailNormalizado)
+                .HasColumnName("email_normalizado")
+                .HasComputedColumnSql("lower(btrim(email))", stored: true)
+                .IsRequired();
+            entity.HasIndex(e => e.EmailNormalizado, "usuarios_email_normalizado_key").IsUnique();
+            entity.HasIndex(e => e.RolId, "idx_usuarios_rol");
+            entity.ToTable("usuarios", table =>
+            {
+                table.HasCheckConstraint("chk_usuarios_email", "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'");
+                table.HasCheckConstraint("chk_usuarios_genero", "genero IS NULL OR genero IN ('masculino', 'femenino', 'otro', 'prefiero_no_decir')");
+                table.HasCheckConstraint("chk_usuarios_telefono", "telefono IS NULL OR telefono ~ '^\\+?[0-9\\s\\-\\(\\)]{8,20}$'");
+            });
+        });
+        modelBuilder.Entity<Encuesta>().ToTable("encuestas", table =>
+            table.HasCheckConstraint("chk_encuestas_fechas", "fecha_inicio IS NULL OR fecha_fin IS NULL OR fecha_fin >= fecha_inicio"));
+        modelBuilder.Entity<Propuesta>().ToTable("propuestas", table =>
+        {
+            table.HasCheckConstraint("chk_propuestas_fechas", "fecha_inicio IS NULL OR fecha_fin IS NULL OR fecha_fin >= fecha_inicio");
+            table.HasCheckConstraint("chk_propuestas_estado", "estado IN ('borrador', 'activa', 'en_progreso', 'completada', 'rechazada')");
+        });
+        modelBuilder.Entity<Evento>().ToTable("eventos", table =>
+            table.HasCheckConstraint("chk_eventos_cantidad_maxima", "cantidad_maxima IS NULL OR cantidad_maxima > 0"));
+        modelBuilder.Entity<SolicitudesAfiliacion>().ToTable("solicitudes_afiliacion", table =>
+            table.HasCheckConstraint("chk_solicitudes_afiliacion_estado", "estado IN ('pendiente', 'aprobada', 'rechazada', 'en_revision')"));
+        modelBuilder.Entity<Sede>(entity =>
+        {
+            entity.HasIndex(e => e.CiudadId, "idx_sedes_ciudad");
+            entity.ToTable("sedes", table =>
+            {
+                table.HasCheckConstraint("chk_sedes_latitud", "latitud IS NULL OR latitud BETWEEN -90 AND 90");
+                table.HasCheckConstraint("chk_sedes_longitud", "longitud IS NULL OR longitud BETWEEN -180 AND 180");
+            });
+        });
+        modelBuilder.Entity<Noticia>().ToTable("noticias", table =>
+            table.HasCheckConstraint("chk_noticias_visualizaciones", "cantidad_visualizaciones >= 0"));
+
+        modelBuilder.Entity<Usuario>(e =>
+        {
+            e.Property(u => u.VersionAcceso).HasColumnName("version_acceso").HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(u => u.IntentosFallidos).HasColumnName("intentos_fallidos").HasDefaultValue(0);
+            e.Property(u => u.BloqueadoHasta).HasColumnName("bloqueado_hasta");
+            e.ToTable("usuarios", t => t.HasCheckConstraint("chk_usuarios_intentos", "intentos_fallidos BETWEEN 0 AND 5"));
+        });
+        modelBuilder.Entity<EncuestaRespuesta>().HasIndex(e => new { e.EncuestaId, e.UsuarioId }, "ux_encuesta_respuestas_usuario")
+            .IsUnique().HasFilter("(usuario_id IS NOT NULL)");
+        modelBuilder.Entity<SolicitudesAfiliacion>().HasIndex(e => e.UsuarioId, "solicitudes_afiliacion_usuario_key").IsUnique();
+
+        modelBuilder.Entity<Encuesta>(entity =>
+        {
+            entity.Property(e => e.PublicadaAt).HasColumnName("publicada_at");
+            entity.Property(e => e.Revision).HasColumnName("revision").HasDefaultValue(1L).ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.Activa).HasDefaultValue(false);
+            entity.HasIndex(e => new { e.Id }, "idx_encuestas_disponibles").HasFilter("activa AND publicada_at IS NOT NULL AND deleted_at IS NULL");
+        });
+        modelBuilder.Entity<EncuestaRespuesta>().HasIndex(e => new { e.EncuestaId, e.Id }, "idx_encuesta_respuestas_pagina");
+        modelBuilder.Entity<SolicitudesCiudadana>(entity =>
+        {
+            entity.Property(e => e.Estado).HasColumnName("estado").HasDefaultValue("pendiente");
+            entity.Property(e => e.Respuesta).HasColumnName("respuesta");
+            entity.Property(e => e.Revision).HasColumnName("revision").HasDefaultValue(1L).ValueGeneratedOnAddOrUpdate();
+            entity.Property(e => e.GestionadoPor).HasColumnName("gestionado_por");
+        });
+        modelBuilder.Entity<SolicitudesAfiliacion>(entity =>
+        {
+            entity.Property(e => e.AprobadaAt).HasColumnName("aprobada_at");
+            entity.Property(e => e.AprobadaPor).HasColumnName("aprobada_por");
+            entity.HasIndex(e => new { e.Estado, e.Id }, "idx_afiliaciones_estado_pagina");
+            entity.HasOne<Usuario>().WithMany().HasForeignKey(e => e.AprobadaPor)
+                .OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("afiliaciones_aprobada_por_fkey");
+        });
         OnModelCreatingPartial(modelBuilder);
     }
 

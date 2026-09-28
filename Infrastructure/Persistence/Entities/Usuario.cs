@@ -16,6 +16,8 @@ public partial class Usuario
 
     public string Email { get; set; } = null!;
 
+    public string EmailNormalizado { get; set; } = null!;
+
     public string PasswordHash { get; set; } = null!;
 
     public string? Telefono { get; set; }
@@ -31,6 +33,9 @@ public partial class Usuario
     public DateTime FechaRegistro { get; set; }
 
     public bool Activo { get; set; }
+    public Guid VersionAcceso { get; set; }
+    public int IntentosFallidos { get; set; }
+    public DateTime? BloqueadoHasta { get; set; }
 
     public DateTime? DeletedAt { get; set; }
 

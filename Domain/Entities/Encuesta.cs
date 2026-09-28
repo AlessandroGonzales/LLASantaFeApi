@@ -3,6 +3,8 @@
     public class Encuesta
     {
         public Guid Id { get; set; }
+        public DateTime? PublicadaAt { get; set; }
+        public long Revision { get; set; }
         public string Titulo { get; set; } = null!;
         public string? Descripcion { get; set; }
         public DateOnly? FechaInicio { get; set; }

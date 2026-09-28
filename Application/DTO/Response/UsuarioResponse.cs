@@ -1,17 +1,16 @@
-﻿
-namespace Application.DTO.Response
+namespace Application.DTO.Response;
+public sealed class UsuarioResponse
 {
-    public class UsuarioResponse
-    {
-        public Guid IdUsuario { get; set; }
-        public string? Nombre { get; set; }
-        public string? Apellido { get; set; }
-        public string? Email { get; set; } 
-        public string? Telefono { get; set; }
-        public string? Genero { get; set; }
-        public string? Profesion { get; set; }
-        public string? FotoPerfilUrl { get; set; }
-        public Guid? CiudadId { get; set; }
-        public string? RoleNombre { get; set; }
-    }
+    public Guid IdUsuario { get; init; }
+    public string Nombre { get; init; } = string.Empty;
+    public string Apellido { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string? Telefono { get; init; }
+    public DateOnly? FechaNacimiento { get; init; }
+    public string? Genero { get; init; }
+    public string? Profesion { get; init; }
+    public string? FotoPerfilUrl { get; init; }
+    public Guid? CiudadId { get; init; }
+    public string? RoleNombre { get; init; }
+    public DateTime FechaRegistro { get; init; }
 }

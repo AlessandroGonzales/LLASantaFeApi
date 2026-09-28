@@ -22,6 +22,4 @@ public partial class Departamento
     public virtual ICollection<Propuesta> Propuesta { get; set; } = new List<Propuesta>();
 
     public virtual ICollection<Representante> Representantes { get; set; } = new List<Representante>();
-
-    public virtual ICollection<Sede> Sedes { get; set; } = new List<Sede>();
 }

@@ -3,6 +3,10 @@
     public class SolicitudesCiudadana
     {
         public Guid Id { get; set; }
+        public string Estado { get; set; } = "pendiente";
+        public string? Respuesta { get; set; }
+        public long Revision { get; set; }
+        public Guid? GestionadoPor { get; set; }
         public Guid UsuarioId { get; set; }
         public string Motivo { get; set; } = null!;
         public string Mensaje { get; set; } = null!;

@@ -1,0 +1,18 @@
+# Fragmento para incorporar en la configuración del clamd real.
+# La API conecta por TCP privado. No publicar 3310 en Internet.
+TCPSocket 3310
+TCPAddr 127.0.0.1
+MaxThreads 2
+MaxQueue 4
+StreamMaxLength 2M
+MaxScanSize 16M
+MaxFileSize 4M
+MaxRecursion 5
+MaxFiles 100
+MaxScanTime 5000
+ReadTimeout 10
+CommandReadTimeout 5
+ScanPDF yes
+HeuristicAlerts yes
+AlertEncryptedDoc yes
+AlertExceedsMax yes

@@ -6,6 +6,8 @@ namespace Infrastructure.Persistence.Entities;
 public partial class SolicitudesAfiliacion
 {
     public Guid Id { get; set; }
+    public DateTime? AprobadaAt { get; set; }
+    public Guid? AprobadaPor { get; set; }
 
     public Guid UsuarioId { get; set; }
 

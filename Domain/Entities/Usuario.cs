@@ -15,6 +15,9 @@ public class Usuario
     public string? FotoPerfilUrl { get; set; }
     public DateTime FechaRegistro { get; set; }
     public bool Activo { get; set; }
+    public Guid VersionAcceso { get; set; }
+    public int IntentosFallidos { get; set; }
+    public DateTime? BloqueadoHasta { get; set; }
     public DateTime? DeletedAt { get; set; }
     public Guid? CiudadId { get; set; }
     public virtual Ciudade? Ciudad { get; set; }

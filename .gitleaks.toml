@@ -1,0 +1,20 @@
+title = "LLASantaFeApi: reglas predeterminadas y tokens OAuth"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "google-refresh-token"
+description = "Refresh token de Google"
+regex = '''1//[A-Za-z0-9_-]{20,}'''
+
+[[rules]]
+id = "connection-password"
+description = "Password literal en cadena de conexión"
+regex = '''(?i)(?:password|pwd)\s*=\s*([^;\s"'$<>]{4,})'''
+secretGroup = 1
+
+[[rules]]
+id = "json-signing-key"
+description = "Clave literal no vacía en configuración JSON"
+regex = '''(?i)"key"\s*:\s*"([^"\r\n]{8,})"'''
+secretGroup = 1

@@ -21,5 +21,7 @@ public partial class Ciudade
 
     public virtual ICollection<Noticia> Noticia { get; set; } = new List<Noticia>();
 
+    public virtual ICollection<Sede> Sedes { get; set; } = new List<Sede>();
+
     public virtual ICollection<Usuario> Usuarios { get; set; } = new List<Usuario>();
 }
