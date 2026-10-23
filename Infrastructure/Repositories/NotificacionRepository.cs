@@ -18,10 +18,12 @@ public sealed class NotificacionRepository(NpgsqlDataSource source) : INotificac
     }
     public async Task<CorreoPendiente?> ReservarAsync(int limiteDiario,CancellationToken ct)
     {
-        await using var cmd=source.CreateCommand("SELECT id,tipo,email,intentos FROM public.reservar_correo($1)");
+        await using var cmd=source.CreateCommand("SELECT id,tipo,email,intentos,accion_id,codigo_hash,vence_at FROM public.reservar_correo($1)");
         cmd.Parameters.AddWithValue(limiteDiario);
         await using var reader=await cmd.ExecuteReaderAsync(ct);
-        return await reader.ReadAsync(ct) ? new(reader.GetGuid(0),reader.GetString(1),reader.GetString(2),reader.GetInt32(3)) : null;
+        return await reader.ReadAsync(ct) ? new(reader.GetGuid(0),reader.GetString(1),reader.GetString(2),reader.GetInt32(3),
+            reader.IsDBNull(4) ? null : reader.GetGuid(4),reader.IsDBNull(5) ? null : reader.GetString(5),
+            reader.IsDBNull(6) ? null : reader.GetDateTime(6)) : null;
     }
     public async Task FinalizarAsync(Guid id,string estado,string? proveedorId,string? error,int esperaSegundos,CancellationToken ct)
     {

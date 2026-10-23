@@ -13,18 +13,23 @@ public sealed class ParticipacionUsuarioRepository(LLASantaFeDbContext db) : IPa
                 FechaInicio = e.FechaInicio, FechaFin = e.FechaFin, DeletedAt = e.DeletedAt
             }).SingleOrDefaultAsync(ct);
 
+    public Task<Domain.Models.EncuestaRespuestaComprobante?> ObtenerRespuestaEncuestaAsync(Guid usuarioId, Guid encuestaId, CancellationToken ct) =>
+        db.EncuestaRespuestas.AsNoTracking().Where(r => r.UsuarioId == usuarioId && r.EncuestaId == encuestaId)
+            .Select(r => new Domain.Models.EncuestaRespuestaComprobante(r.Id, r.CreatedAt)).SingleOrDefaultAsync(ct);
+
     public async Task<bool> ResponderEncuestaAsync(Guid respuestaId, Guid usuarioId, Encuesta encuesta,
         string respuestas, DateOnly fecha, CancellationToken ct) =>
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO public.encuesta_respuestas (id, encuesta_id, usuario_id, respuestas)
             SELECT {respuestaId}, e.id, {usuarioId}, CAST({respuestas} AS jsonb)
             FROM public.encuestas e
+            JOIN public.usuarios u ON u.id = {usuarioId} AND u.activo AND u.deleted_at IS NULL
+              AND (NOT u.requiere_verificar_email OR u.email_verificado_at IS NOT NULL)
             WHERE e.id = {encuesta.Id} AND e.activa AND e.publicada_at IS NOT NULL AND e.deleted_at IS NULL
               AND (e.fecha_inicio IS NULL OR e.fecha_inicio <= {fecha})
               AND (e.fecha_fin IS NULL OR e.fecha_fin >= {fecha})
               AND e.configuracion = CAST({encuesta.Configuracion} AS jsonb)
-              AND EXISTS (SELECT 1 FROM public.usuarios u WHERE u.id = {usuarioId} AND u.activo AND u.deleted_at IS NULL)
-            FOR SHARE OF e
+            FOR SHARE OF e, u
             """, ct) == 1;
 
     public async Task<bool> SolicitarAfiliacionAsync(Guid solicitudId, Guid usuarioId, CancellationToken ct) =>
@@ -32,12 +37,10 @@ public sealed class ParticipacionUsuarioRepository(LLASantaFeDbContext db) : IPa
             INSERT INTO public.solicitudes_afiliacion (id, usuario_id, estado)
             SELECT {solicitudId}, u.id, 'pendiente'
             FROM public.usuarios u WHERE u.id = {usuarioId} AND u.activo AND u.deleted_at IS NULL
+              AND (NOT u.requiere_verificar_email OR u.email_verificado_at IS NOT NULL)
+            FOR SHARE OF u
             """, ct) == 1;
 
-    public async Task<bool> EnviarSolicitudAsync(Guid solicitudId, Guid usuarioId, string motivo, string mensaje, CancellationToken ct) =>
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO public.solicitudes_ciudadanas (id, usuario_id, motivo, mensaje, aceptacion)
-            SELECT {solicitudId}, u.id, {motivo}, {mensaje}, false
-            FROM public.usuarios u WHERE u.id = {usuarioId} AND u.activo AND u.deleted_at IS NULL
-            """, ct) == 1;
+    public Task<Domain.Models.SolicitudCreacion> EnviarSolicitudAsync(Guid solicitudId, Guid usuarioId, string motivo, string mensaje, Guid? clave, CancellationToken ct) =>
+        db.Database.SqlQuery<Domain.Models.SolicitudCreacion>($"SELECT * FROM public.crear_solicitud_ciudadana({solicitudId},{usuarioId},{motivo},{mensaje},{clave})").SingleAsync(ct);
 }

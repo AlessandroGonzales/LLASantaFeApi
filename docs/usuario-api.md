@@ -1,11 +1,15 @@
 # Usuario: contrato HTTP y verificación
 
+**Prueba integral actual (23 de octubre de 2026):** seguir
+[CU-U01: recorrido completo en Swagger](prueba-integral-usuario-swagger.md), que
+incluye cuenta, afiliación, encuestas, solicitudes/PDF, recuperación, cierre y baja,
+con intervención administrativa y resultados esperados.
+
+**Actualización del 14 de octubre de 2026:** el paso 2 añade verificación para cuentas nuevas, recuperación y cierre de sesión. El contrato y la guía vigentes están en [usuario-sesion-recuperacion.md](usuario-sesion-recuperacion.md). Los ejemplos y resultados anteriores de este documento describen etapas previas; para probar la versión actual seguir esa guía.
+
 ## Requisito de base de datos
 
-Aplicar **una vez** `database/002_usuario_seguridad.sql`, después de 001 y antes de
-usar esta versión de la API. Hacer backup y detener las escrituras durante la
-migración. El script no se aplicó a tu base existente; se probó en PostgreSQL
-16.10 temporal. El modelo EF ya incluye los cambios: no requiere scaffolding.
+La API actual requiere 001–009 aplicados en orden. Para actualizar una base que ya tiene 001–008, detener la API y aplicar **una vez** `database/009_afiliacion_resolucion.sql`; ver [Afiliación](afiliacion-api.md). El POST de solicitudes ciudadanas conserva `Idempotency-Key`; ver [su contrato](solicitud-ciudadana-idempotencia.md). Se mantiene un único DbContext. Las migraciones se prueban en PostgreSQL temporal y no se aplican automáticamente a la base configurada del usuario. El comando siguiente pertenece a la preparación original de 002: no reejecutarlo sobre una base que ya lo tiene.
 
 ```powershell
 & 'C:/Program Files/PostgreSQL/16/bin/psql.exe' -h localhost -p 5432 -U postgres -d LLASantaFe -W -v ON_ERROR_STOP=1 -f ./database/002_usuario_seguridad.sql
@@ -263,4 +267,3 @@ El módulo de encuestas requiere también `database/003_encuestas.sql`, después
 001 y 002. Solo se responde a encuestas publicadas, activas y dentro de fecha.
 Creación, edición de borradores, publicación, cierre y ejemplos están en
 `docs/encuesta-api.md`. Las pruebas conjuntas actuales completan 186 comprobaciones.
-

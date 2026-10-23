@@ -1,14 +1,14 @@
 # Correos transaccionales con Gmail
 
-Implementados: bienvenida al crear una cuenta y aviso de aprobación de su solicitud de afiliación. No se implementaron campañas, avisos de noticias, candidatos ni encuestas segmentadas por ciudad. El registro de una cuenta no constituye una suscripción a campañas ni verifica la propiedad de su email.
+Implementados: verificación de email, recuperación de contraseña, aviso de contraseña actualizada, bienvenida al confirmar una cuenta nueva y aprobación de afiliación. El contrato de identidad está en [usuario-sesion-recuperacion.md](usuario-sesion-recuperacion.md). El registro no constituye una suscripción a campañas; no se implementan avisos segmentados.
 
 ## 1. Aplicar la base
 
-Detener la API y ejecutar una vez `database/006_correos_transaccionales.sql` en pgAdmin, después de 001–005. No modifica los datos existentes ni genera avisos históricos. No requiere otro DbContext ni scaffolding: el repositorio llama funciones SQL parametrizadas.
+La versión actual requiere 001–007. Si ya se aplicó 006, detener la API y aplicar una vez `database/007_usuario_verificacion_recuperacion.sql`; no volver a ejecutar 006. Los scripts no generan correos históricos. El repositorio conserva SQL parametrizado y el mismo DbContext.
 
 La tabla `correos_transaccionales` mantiene los envíos privados por destinatario. No se utiliza la tabla general `notificaciones` para exponer correspondencia privada. Los triggers encolan dentro de la misma transacción del registro/aprobación: un rollback también revierte el aviso. Una restricción única por tipo y referencia evita duplicar el evento, incluso ante concurrencia.
 
-Con Gmail desactivado se siguen guardando avisos; no se envían hasta activarlo. Al activar se procesarán los pendientes de los últimos 14 días. Revisar esa cola antes de activar una cuenta real.
+Con Gmail desactivado se siguen guardando avisos. Al activar se procesan los eventos vigentes; los códigos usados, vencidos o ligados a un acceso invalidado se cancelan. El límite general de 14 días sigue aplicándose a los otros avisos.
 
 ## 2. Configurar la cuenta remitente
 
@@ -27,6 +27,12 @@ Se solicita solamente el [scope de envío](https://developers.google.com/workspa
 
 Agregar **una sola sección** `Gmail` al objeto raíz de `Presentation/appsettings.Local.json`, conservando ConnectionStrings y JwtSettings existentes. Este archivo ya está ignorado por Git y excluido de publicación. No agregar secretos a `appsettings.json`.
 
+En Development, `appsettings.Local.json` se carga después de `appsettings.json`:
+sus valores tienen prioridad, y las variables de entorno/argumentos se agregan
+después. Actualizar credenciales solo en el archivo general no corrige unas
+credenciales antiguas presentes en el local. `GmailOptions` y el cliente de envío
+se construyen al arrancar: **reiniciar la API después de modificar OAuth**.
+
 ```json
 "Gmail": {
   "Enabled": false,
@@ -44,10 +50,18 @@ En Azure se usarán los mismos nombres mediante configuración segura: `Gmail__E
 
 ## 3. Probar los disparadores automáticos
 
-- Registrar una cuenta nueva con un email de prueba que controles: crea exactamente una bienvenida pendiente. Repetir el registro no crea otro aviso.
+- Registrar una cuenta nueva con un email de prueba que controles: encola la verificación. Confirmar el email encola la bienvenida. Repetir el registro no crea otra cuenta ni otro aviso de bienvenida.
 - Con ese usuario, solicitar afiliación; con un administrador, aprobarla: crea un único aviso de aprobación. No se envía al crear la solicitud pendiente.
-- Con envío activo, el worker consulta cada 15 segundos cuando está ocioso. Cuando hay trabajo procesa un correo por iteración; la base impone al menos dos segundos entre reservas globales.
+- Con envío activo, el worker recibe una señal local tras registro/aprobación/encolado confirmado. Si no hay trabajo espera progresivamente 30, 60, 120, 240 y hasta 300 segundos, interrumpibles por esa señal. Cuando hay trabajo procesa un correo por iteración; la base conserva al menos dos segundos entre reservas globales. Ver [configuración de consumo](consumo-api.md) para límites, recuperación y verificación del 14 de octubre.
 - Verificar el correo recibido y la carpeta Enviados del remitente. `enviado` significa que Gmail aceptó el mensaje, no que se haya confirmado la lectura o entrega en la bandeja de entrada.
+
+Si el correo no llega, consultar `estado`, `intentos` y `error_codigo` del trabajo:
+`fallido / oauth_rechazado` indica que Google rechazó la autorización. Comprobar el
+conjunto ClientId/ClientSecret/RefreshToken de la configuración efectiva; no imprimir
+sus valores en logs. Corregirlo y reiniciar no reintenta automáticamente los
+trabajos fallidos. Si venció el código de verificación, solicitar uno nuevo con
+`POST /api/Usuario/email/solicitar-verificacion`. Si todavía existe un código vigente,
+la protección contra bombardeo conserva ese código y no emite otro mensaje.
 
 ## 4. Único endpoint
 

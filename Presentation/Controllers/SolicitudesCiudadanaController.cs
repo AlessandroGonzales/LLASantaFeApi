@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Application.DTO.Request;
+using Application.DTO.Response;
 using Application.Interfaces;
 using Domain.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -19,10 +20,14 @@ public sealed class SolicitudesCiudadanaController(ISolicitudesCiudadanaAppServi
     private Guid UsuarioId => Guid.Parse(User.FindFirst("sub")!.Value);
     private bool Admin => User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
     [HttpPost, EnableRateLimiting("escritura")]
-    public async Task<IActionResult> Crear(SolicitudCiudadanaRequest request,CancellationToken ct)
+    [ProducesResponseType(typeof(ParticipacionResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ParticipacionResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Crear(SolicitudCiudadanaRequest request,[FromHeader(Name=IdempotencyKey.Header)] string? claveIdempotencia,CancellationToken ct)
     {
-        var result=await usuarios.EnviarSolicitudAsync(UsuarioId,request,ct);
-        return CreatedAtAction(nameof(Obtener),new {id=result.Id},result);
+        var clave=IdempotencyKey.Parse(claveIdempotencia,Request.Headers[IdempotencyKey.Header].Count);
+        var result=await usuarios.EnviarSolicitudAsync(UsuarioId,request,clave,ct);
+        var receipt=new ParticipacionResponse(result.Id,"recibida");
+        return result.Nueva ? CreatedAtAction(nameof(Obtener),new {id=result.Id},receipt) : Ok(receipt);
     }
     [HttpGet]
     public Task<PaginaSolicitudes> MisSolicitudes([FromQuery] Guid? cursor,[FromQuery] string? estado,CancellationToken ct,[FromQuery] int limite=20) =>
@@ -39,21 +44,26 @@ public sealed class SolicitudesCiudadanaController(ISolicitudesCiudadanaAppServi
         return NoContent();
     }
     [HttpPost("{id:guid}/pdf"), Consumes("multipart/form-data"), EnableRateLimiting("escritura")]
+    [ApiWorkload(ApiWorkload.Pdf)]
     [RequestSizeLimit(2113536)]
     [RequestFormLimits(MultipartBodyLengthLimit=2113536,ValueCountLimit=1,ValueLengthLimit=128,MultipartHeadersCountLimit=8,MultipartHeadersLengthLimit=2048)]
     [ServiceFilter(typeof(PdfUploadQuotaFilter))]
     [ServiceFilter(typeof(PdfAccountRateFilter), Order=-1000)]
-    public async Task<IActionResult> Adjuntar(Guid id,[FromForm] SolicitudPdfForm form,CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Adjuntar(Guid id,[FromForm] SolicitudPdfForm form,[FromHeader(Name=IdempotencyKey.Header)] string? claveIdempotencia,CancellationToken ct)
     {
         if(Request.Form.Files.Count!=1 || Request.Form.Count!=0 ||
             !string.Equals(form.Archivo.Name, "archivo", StringComparison.OrdinalIgnoreCase))
             return BadRequest(new {mensaje="Enviá únicamente un PDF en el campo archivo."});
         await using var stream=form.Archivo.OpenReadStream();
-        await solicitudes.AdjuntarAsync(id,UsuarioId,(Guid)HttpContext.Items["PdfIntento"]!,stream,
+        IdempotencyKey.Parse(claveIdempotencia,Request.Headers[IdempotencyKey.Header].Count);
+        var nueva=await solicitudes.AdjuntarAsync(id,UsuarioId,(SolicitudPdfReserva)HttpContext.Items["PdfIntento"]!,stream,
             form.Archivo.Length,form.Archivo.FileName,form.Archivo.ContentType,ct);
-        return CreatedAtAction(nameof(Descargar),new {id},new {estado="disponible"});
+        return nueva ? CreatedAtAction(nameof(Descargar),new {id},new {estado="disponible"}) : Ok(new {estado="disponible"});
     }
     [HttpGet("{id:guid}/pdf"), EnableRateLimiting("escritura")]
+    [ApiWorkload(ApiWorkload.Pdf)]
     [ServiceFilter(typeof(PdfAccountRateFilter), Order=-1000)]
     public async Task<IActionResult> Descargar(Guid id,CancellationToken ct)
     {

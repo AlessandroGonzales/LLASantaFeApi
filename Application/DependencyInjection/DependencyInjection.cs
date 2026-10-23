@@ -13,7 +13,6 @@ namespace Application.DependencyInjection
             services.AddScoped<ICiudadAppService, CiudadAppService>();
             services.AddScoped<IDepartamentoAppService, DepartamentoAppService>();
             services.AddScoped<IEncuestaAppService, EncuestaAppService>();
-            services.AddScoped<IEncuestaRespuestaAppService, EncuestaRespuestaAppService>();
             services.AddScoped<IEventoAppService, EventoAppService>();
             services.AddScoped<INoticiaAppService, NoticiaAppService>();
             services.AddScoped<INotificacionAppService, NotificacionAppService>();

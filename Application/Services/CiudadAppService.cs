@@ -1,5 +1,6 @@
 ﻿using Application.DTO.Response;
 using Application.Interfaces;
+using Application.Validation;
 using Domain.Repositories;
 
 namespace Application.Services
@@ -14,11 +15,13 @@ namespace Application.Services
 
         public async Task AgregarCiudadAsync(string nombre, Guid departamentoId, CancellationToken cancellationToken)
         {
-            await _repo.AgregarCiudadAsync(nombre, departamentoId, cancellationToken);
+            GeografiaRules.Departamento(departamentoId);
+            await _repo.AgregarCiudadAsync(GeografiaRules.Nombre(nombre), departamentoId, cancellationToken);
         }
 
         public async Task<IEnumerable<CiudadResponse>> ObtenerCiudadesPorDepartamentoIdAsync(Guid departamentoId, CancellationToken cancellationToken)
         {
+            GeografiaRules.Departamento(departamentoId);
             var ciudades = await _repo.ObtenerCiudadesPorDepartamentoIdAsync(departamentoId, cancellationToken);
             return ciudades.Select(c => new CiudadResponse
             {

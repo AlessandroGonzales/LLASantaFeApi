@@ -28,8 +28,9 @@ public sealed class SolicitudesCiudadanaAppService(ISolicitudesCiudadanaReposito
         if (!await solicitudes.GestionarAsync(id, admin, request.Revision, request.Estado, request.Respuesta?.Trim(), ct))
             throw new BusinessException("conflict", "La solicitud cambió o ya está finalizada. Volvé a consultarla.");
     }
-    public Task<Guid> ReservarPdfAsync(Guid id, Guid usuario, CancellationToken ct) => solicitudes.ReservarPdfAsync(id, usuario, ct);
-    public async Task AdjuntarAsync(Guid id, Guid usuario, Guid intento, Stream contenido, long length, string nombre, string contentType, CancellationToken ct)
+    public Task<SolicitudPdfReserva> ReservarPdfAsync(Guid id, Guid usuario, Guid? clave, CancellationToken ct) => solicitudes.ReservarPdfAsync(id, usuario, clave, ct);
+    public Task FinalizarIntentoPdfAsync(Guid intento, Guid usuario, CancellationToken ct) => solicitudes.FinalizarIntentoPdfAsync(intento,usuario,ct);
+    public async Task<bool> AdjuntarAsync(Guid id, Guid usuario, SolicitudPdfReserva reserva, Stream contenido, long length, string nombre, string contentType, CancellationToken ct)
     {
         if (length > MaxPdfBytes) throw new BusinessException("too_large", "El PDF no puede superar 2 MiB.");
         if (length < 20 || nombre.Length > 180 || !nombre.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ||
@@ -43,9 +44,16 @@ public sealed class SolicitudesCiudadanaAppService(ISolicitudesCiudadanaReposito
         // Es un filtro de formato, no sustituye al antivirus ni prueba que un PDF sea inocuo.
         if (!bytes.AsSpan().StartsWith("%PDF-"u8) || !Encoding.ASCII.GetString(bytes.AsSpan(Math.Max(0, bytes.Length - 1024))).TrimEnd().EndsWith("%%EOF", StringComparison.Ordinal))
             throw new BusinessException("validation", "El archivo no tiene encabezado y cierre PDF válidos.");
+        var hash=Convert.ToHexStringLower(SHA256.HashData(bytes));
+        if (reserva.Confirmada)
+        {
+            if (reserva.Bytes!=length || !string.Equals(reserva.Sha256,hash,StringComparison.Ordinal))
+                throw new BusinessException("conflict", "La clave de idempotencia corresponde a otro PDF.");
+            return false;
+        }
         if (!await scanner.EsLimpioAsync(bytes, ct))
             throw new BusinessException("validation", "El análisis de seguridad rechazó el archivo.");
-        await solicitudes.GuardarPdfAsync(id, usuario, intento, bytes, Convert.ToHexStringLower(SHA256.HashData(bytes)), ct);
+        return await solicitudes.GuardarPdfAsync(id, usuario, reserva.Intento, bytes, hash, ct);
     }
     public async Task<byte[]> DescargarAsync(Guid id, Guid usuario, bool admin, CancellationToken ct) =>
         (await solicitudes.ObtenerPdfAsync(id, usuario, admin, ct) ?? throw new BusinessException("not_found", "Adjunto no disponible.")).Contenido;

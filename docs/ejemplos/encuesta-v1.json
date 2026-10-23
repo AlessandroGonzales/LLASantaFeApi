@@ -1,0 +1,47 @@
+{
+  "titulo": "Experiencia con el sitio",
+  "descripcion": "Opiniones sobre el funcionamiento de la aplicación",
+  "tipo": "general",
+  "fechaInicio": null,
+  "fechaFin": null,
+  "ciudadId": null,
+  "departamentoId": null,
+  "configuracion": {
+    "version": 1,
+    "preguntas": [
+      {
+        "id": "facilidad",
+        "texto": "¿Qué tan fácil fue usar el sitio?",
+        "tipo": "numero",
+        "obligatoria": true,
+        "min": 1,
+        "max": 5
+      },
+      {
+        "id": "seccion",
+        "texto": "¿Qué sección consultaste?",
+        "tipo": "opcion_unica",
+        "obligatoria": true,
+        "opciones": [
+          { "id": "noticias", "texto": "Noticias" },
+          { "id": "sedes", "texto": "Sedes" }
+        ]
+      },
+      {
+        "id": "dispositivos",
+        "texto": "¿Desde qué dispositivos usaste el sitio?",
+        "tipo": "opcion_multiple",
+        "opciones": [
+          { "id": "movil", "texto": "Teléfono" },
+          { "id": "computadora", "texto": "Computadora" }
+        ]
+      },
+      {
+        "id": "comentario",
+        "texto": "¿Qué mejorarías del sitio?",
+        "tipo": "texto",
+        "maxLongitud": 500
+      }
+    ]
+  }
+}

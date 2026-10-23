@@ -1,5 +1,7 @@
 # Prueba paso a paso: solicitud y PDF
 
+Actualización del paso 4: la API actual necesita SQL 008 después de 001–007. La [guía vigente de reintentos JSON/PDF](solicitud-ciudadana-idempotencia.md) explica el header `Idempotency-Key` y las pruebas 201/200/409. Los pasos originales siguientes conservan la preparación local de ClamAV y el formato PDF; no reejecutar 004 si ya fue aplicado.
+
 ## 1. Preparar la base y la API
 
 Si ya ejecutaste `database/004_solicitudes_ciudadanas.sql`, no lo repitas.

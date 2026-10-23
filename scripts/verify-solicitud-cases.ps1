@@ -1,9 +1,10 @@
 # Se ejecuta dentro de verify-usuario.ps1 con usuarios sintéticos y DB temporal.
-function PdfCall($id,$token,[byte[]]$bytes,$status,$filename='documento.pdf',$type='application/pdf',$extra=$false,$field='archivo') {
+function PdfCall($id,$token,[byte[]]$bytes,$status,$filename='documento.pdf',$type='application/pdf',$extra=$false,$field='archivo',$key=$null,$inspect=$false) {
     $client=[Net.Http.HttpClient]::new()
     $multi=[Net.Http.MultipartFormDataContent]::new()
     try {
         if($token){$client.DefaultRequestHeaders.Authorization=[Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer',$token)}
+        if($null -ne $key){[void]$client.DefaultRequestHeaders.TryAddWithoutValidation('Idempotency-Key',[string]$key)}
         $file=[Net.Http.ByteArrayContent]::new($bytes)
         $file.Headers.ContentType=[Net.Http.Headers.MediaTypeHeaderValue]::new($type)
         $multi.Add($file,$field,$filename)
@@ -11,7 +12,9 @@ function PdfCall($id,$token,[byte[]]$bytes,$status,$filename='documento.pdf',$ty
         $r=$client.PostAsync("$base/api/SolicitudCiudadana/$id/pdf",$multi).GetAwaiter().GetResult()
         $body=$r.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         Assert ([int]$r.StatusCode -eq $status) "PDF esperaba $status, obtuvo $($r.StatusCode): $body"
+        if($inspect){$inspection=[pscustomobject]@{Body=$body;RetryAfter=$r.Headers.RetryAfter.ToString()}}
         $r.Dispose()
+        if($inspect){return $inspection}
     } finally {$multi.Dispose();$client.Dispose()}
 }
 function TestPdf($marker) {

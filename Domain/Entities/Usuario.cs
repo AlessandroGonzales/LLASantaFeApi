@@ -15,6 +15,8 @@ public class Usuario
     public string? FotoPerfilUrl { get; set; }
     public DateTime FechaRegistro { get; set; }
     public bool Activo { get; set; }
+    public DateTime? EmailVerificadoAt { get; set; }
+    public bool RequiereVerificarEmail { get; set; }
     public Guid VersionAcceso { get; set; }
     public int IntentosFallidos { get; set; }
     public DateTime? BloqueadoHasta { get; set; }

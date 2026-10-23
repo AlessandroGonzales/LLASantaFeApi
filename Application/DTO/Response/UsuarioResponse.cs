@@ -5,6 +5,8 @@ public sealed class UsuarioResponse
     public string Nombre { get; init; } = string.Empty;
     public string Apellido { get; init; } = string.Empty;
     public string Email { get; init; } = string.Empty;
+    public bool EmailVerificado { get; init; }
+    public bool RequiereVerificarEmail { get; init; }
     public string? Telefono { get; init; }
     public DateOnly? FechaNacimiento { get; init; }
     public string? Genero { get; init; }

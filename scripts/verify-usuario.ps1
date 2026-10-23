@@ -7,22 +7,23 @@ $base='http://127.0.0.1:5191'
 $script:checks=0
 $api=$null
 $old=@{}
-foreach($key in @('ConnectionStrings__DefaultConnection','JwtSettings__Key','ASPNETCORE_ENVIRONMENT','RateLimits__General','RateLimits__Login','RateLimits__Registro','RateLimits__Escritura','PdfAntivirus__Host','PdfAntivirus__Port','Gmail__Enabled')){$old[$key]=[Environment]::GetEnvironmentVariable($key)}
+foreach($key in @('ConnectionStrings__DefaultConnection','JwtSettings__Key','ASPNETCORE_ENVIRONMENT','RateLimits__General','RateLimits__Login','RateLimits__Registro','RateLimits__Escritura','RateLimits__CuentaCorreo','PdfAntivirus__Host','PdfAntivirus__Port','Gmail__Enabled')){$old[$key]=[Environment]::GetEnvironmentVariable($key)}
 function Assert($condition,$message){if(-not $condition){throw $message};$script:checks++}
 function Sql($query){
     $result=& $psql -h 127.0.0.1 -p 55432 -U migration_test -d $db -At -v ON_ERROR_STOP=1 -c $query
     if($LASTEXITCODE -ne 0){throw 'Falló SQL de prueba.'}
     return $result
 }
-function Call($method,$path,$body,$token,$status){
+function Call($method,$path,$body,$token,$status,$headers=@{}){
     $args=@{Uri="$base$path";Method=$method;SkipHttpErrorCheck=$true}
     if($null -ne $body){$args.ContentType='application/json';$args.Body=if($body -is [string]){$body}else{$body|ConvertTo-Json -Depth 20 -Compress}}
-    if($token){$args.Headers=@{Authorization="Bearer $token"}}
+    $args.Headers=$headers.Clone()
+    if($token){$args.Headers['Authorization']="Bearer $token"}
     $r=Invoke-WebRequest @args
     Assert ($r.StatusCode -eq $status) "$method $path esperaba $status; recibió $($r.StatusCode): $($r.Content)"
     return $r
 }
-function Json($response){return $response.Content|ConvertFrom-Json}
+function Json($response){$content=$response.Content;if($content -is [byte[]]){$content=[Text.Encoding]::UTF8.GetString($content)};return $content|ConvertFrom-Json}
 function StopApi{if($script:api -and -not $script:api.HasExited){Stop-Process -Id $script:api.Id;$script:api.WaitForExit()}}
 function StartApi{
     $script:api=Start-Process -FilePath (Join-Path $root '.tools/dotnet/dotnet.exe') -ArgumentList @('bin/Release/net10.0/Presentation.dll','--urls',$base) -WorkingDirectory (Join-Path $root 'Presentation') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $root '.artifacts/usuario-test.stdout.log') -RedirectStandardError (Join-Path $root '.artifacts/usuario-test.stderr.log')
@@ -33,17 +34,18 @@ function StartApi{
     }
     throw 'La API no respondió.'
 }
-function ConcurrentPost($path,$body,$token){
+function ConcurrentPost($path,$body,$token,$expected='201,409',$headers=@{}){
     $client=[Net.Http.HttpClient]::new()
     try{
         $client.DefaultRequestHeaders.Authorization=[Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer',$token)
+        foreach($header in $headers.Keys){[void]$client.DefaultRequestHeaders.TryAddWithoutValidation($header,[string]$headers[$header])}
         $json=$body|ConvertTo-Json -Depth 20 -Compress
         $one=[Net.Http.StringContent]::new($json,[Text.Encoding]::UTF8,'application/json')
         $two=[Net.Http.StringContent]::new($json,[Text.Encoding]::UTF8,'application/json')
         $tasks=@($client.PostAsync("$base$path",$one),$client.PostAsync("$base$path",$two))
         [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]$tasks)
         $codes=@($tasks|ForEach-Object{[int]$_.Result.StatusCode}|Sort-Object)
-        Assert (($codes -join ',') -eq '201,409') "Concurrencia incorrecta: $codes"
+        Assert (($codes -join ',') -eq $expected) "Concurrencia incorrecta en ${path}: $codes"
         foreach($t in $tasks){$t.Result.Dispose()}
         $one.Dispose();$two.Dispose()
     }finally{$client.Dispose()}
@@ -56,15 +58,67 @@ function Sign($claims){
     $mac=[Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($env:JwtSettings__Key))
     try{return "$h.$p.$(Encode ($mac.ComputeHash([Text.Encoding]::UTF8.GetBytes("$h.$p"))))"}finally{$mac.Dispose()}
 }
+function CuentaCodigo($email,$tipo){
+    $safeEmail=$email.Replace("'","''")
+    $id=Sql "SELECT a.id FROM public.usuario_acciones a JOIN public.usuarios u ON u.id=a.usuario_id WHERE u.email_normalizado=lower('$safeEmail') AND a.tipo='$tipo'"
+    if(-not $id){throw 'No existe la acción sintética.'}
+    $keyMac=[Security.Cryptography.HMACSHA256]::new([Text.Encoding]::UTF8.GetBytes($env:JwtSettings__Key))
+    try{$derived=$keyMac.ComputeHash([Text.Encoding]::UTF8.GetBytes('LLASantaFe:cuenta:v1'))}finally{$keyMac.Dispose()}
+    $tokenMac=[Security.Cryptography.HMACSHA256]::new($derived)
+    try{return "$id.$(Encode ($tokenMac.ComputeHash([Text.Encoding]::UTF8.GetBytes("${tipo}:$id"))))"}finally{$tokenMac.Dispose()}
+}
 try{
     $cluster=& $psql -h 127.0.0.1 -p 55432 -U migration_test -d postgres -At -c 'SHOW data_directory'
     Assert ($LASTEXITCODE -eq 0 -and [IO.Path]::GetFullPath($cluster) -eq [IO.Path]::GetFullPath((Join-Path $root '.artifacts/postgres-net10'))) 'No es el cluster temporal esperado.'
     & $psql -h 127.0.0.1 -p 55432 -U migration_test -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db;"|Out-Null
     if($LASTEXITCODE -ne 0){throw 'Falló creación de base temporal.'}
-    foreach($file in @($SchemaPath,(Join-Path $root 'database/001_integridad_base.sql'),(Join-Path $root 'database/002_usuario_seguridad.sql'),(Join-Path $root 'database/003_encuestas.sql'),(Join-Path $root 'database/004_solicitudes_ciudadanas.sql'),(Join-Path $root 'database/005_afiliaciones.sql'),(Join-Path $root 'database/006_correos_transaccionales.sql'))){
+    foreach($file in @($SchemaPath,(Join-Path $root 'database/001_integridad_base.sql'),(Join-Path $root 'database/002_usuario_seguridad.sql'),(Join-Path $root 'database/003_encuestas.sql'),(Join-Path $root 'database/004_solicitudes_ciudadanas.sql'),(Join-Path $root 'database/005_afiliaciones.sql'),(Join-Path $root 'database/006_correos_transaccionales.sql'),(Join-Path $root 'database/007_usuario_verificacion_recuperacion.sql'),(Join-Path $root 'database/008_solicitudes_idempotencia.sql'),(Join-Path $root 'database/009_afiliacion_resolucion.sql'))){
+        if($file.EndsWith('007_usuario_verificacion_recuperacion.sql')){
+            Sql "INSERT INTO public.usuarios(nombre,apellido,email,password_hash) VALUES('Legacy','Test','legacy@example.invalid','legacy-placeholder');" | Out-Null
+        }
+        if($file.EndsWith('008_solicitudes_idempotencia.sql')){
+            Sql @'
+INSERT INTO public.solicitudes_ciudadanas(usuario_id,motivo,mensaje)
+ SELECT id,'duda','Solicitud anterior a la migracion ocho.' FROM public.usuarios WHERE email='legacy@example.invalid';
+INSERT INTO public.solicitud_pdf(solicitud_id,usuario_id,contenido,sha256,bytes)
+ SELECT s.id,s.usuario_id,convert_to('%PDF-1.4 legacy %%EOF','UTF8'),
+ encode(sha256(convert_to('%PDF-1.4 legacy %%EOF','UTF8')),'hex'),octet_length(convert_to('%PDF-1.4 legacy %%EOF','UTF8'))
+ FROM public.solicitudes_ciudadanas s JOIN public.usuarios u ON u.id=s.usuario_id WHERE u.email='legacy@example.invalid';
+'@ | Out-Null
+        }
+        if($file.EndsWith('009_afiliacion_resolucion.sql')){
+            Sql @'
+INSERT INTO public.usuarios(nombre,apellido,email,password_hash) VALUES('Legacy','Approved','legacy.approval@example.invalid','legacy-placeholder');
+INSERT INTO public.solicitudes_afiliacion(usuario_id,estado,observacion)
+ SELECT id,'rechazada','Nota interna heredada.' FROM public.usuarios WHERE email='legacy@example.invalid';
+INSERT INTO public.solicitudes_afiliacion(usuario_id,estado)
+ SELECT id,'aprobada' FROM public.usuarios WHERE email='legacy.approval@example.invalid';
+'@ | Out-Null
+            $legacyCorreoCount=Sql 'SELECT count(*) FROM public.correos_transaccionales'
+        }
         & $psql -h 127.0.0.1 -p 55432 -U migration_test -d $db -v ON_ERROR_STOP=1 -f $file > (Join-Path $root '.artifacts/usuario-schema.log')
         if($LASTEXITCODE -ne 0){throw "Falló $file"}
     }
+    Assert ((Sql "SELECT (NOT requiere_verificar_email AND email_verificado_at IS NULL)::text FROM public.usuarios WHERE email='legacy@example.invalid'") -eq 'true') 'La migración bloqueó o confirmó una cuenta anterior.'
+    Assert ((Sql @'
+SELECT count(*) FROM public.solicitudes_afiliacion s JOIN public.usuarios u ON u.id=s.usuario_id
+ WHERE (u.email='legacy@example.invalid' AND s.estado='rechazada' AND s.observacion='Nota interna heredada.'
+ OR u.email='legacy.approval@example.invalid' AND s.estado='aprobada')
+ AND s.aprobada_at IS NULL AND s.aprobada_por IS NULL AND s.rechazada_at IS NULL
+ AND s.rechazada_por IS NULL AND s.motivo_rechazo IS NULL;
+'@) -eq '2') '009 cambió estados o inventó auditorías/motivos históricos.'
+    Assert ((Sql 'SELECT count(*) FROM public.correos_transaccionales') -eq $legacyCorreoCount) '009 generó notificaciones históricas.'
+    Assert ((Sql @'
+SELECT count(*) FROM public.solicitudes_ciudadanas s JOIN public.solicitud_pdf p ON p.solicitud_id=s.id
+ JOIN public.usuarios u ON u.id=s.usuario_id
+ WHERE u.email='legacy@example.invalid' AND s.mensaje='Solicitud anterior a la migracion ocho.'
+ AND s.clave_idempotencia IS NULL AND s.solicitud_hash IS NULL AND p.clave_idempotencia IS NULL
+ AND p.contenido=convert_to('%PDF-1.4 legacy %%EOF','UTF8')
+ AND p.sha256=encode(sha256(p.contenido),'hex');
+'@) -eq '1') '008 modificó solicitudes/PDF anteriores o les inventó una clave.'
+    Sql "DELETE FROM public.solicitudes_ciudadanas WHERE usuario_id=(SELECT id FROM public.usuarios WHERE email='legacy@example.invalid')" | Out-Null
+    Sql "DELETE FROM public.solicitudes_afiliacion WHERE usuario_id IN (SELECT id FROM public.usuarios WHERE email IN ('legacy@example.invalid','legacy.approval@example.invalid')); DELETE FROM public.usuarios WHERE email='legacy.approval@example.invalid';" | Out-Null
+    Sql "DELETE FROM public.usuarios WHERE email='legacy@example.invalid'" | Out-Null
     $city=[Guid]::NewGuid().ToString()
     Sql "INSERT INTO public.departamentos(nombre) VALUES('Test'); INSERT INTO public.ciudades(id,nombre,departamento_id) SELECT '$city','Test',id FROM public.departamentos WHERE nombre='Test'; INSERT INTO public.roles(nombre) VALUES('Admin');"|Out-Null
     $env:ConnectionStrings__DefaultConnection="Host=127.0.0.1;Port=55432;Database=$db;Username=migration_test"
@@ -72,6 +126,7 @@ try{
     $env:ASPNETCORE_ENVIRONMENT='Development'
     $env:PdfAntivirus__Host='127.0.0.1';$env:PdfAntivirus__Port='13310'
     $env:RateLimits__General='1000';$env:RateLimits__Login='100';$env:RateLimits__Registro='100';$env:RateLimits__Escritura='1000'
+    $env:RateLimits__CuentaCorreo='100'
     $env:Gmail__Enabled='false'
     StartApi
     $password='Synthetic-Only-Password!2026'
@@ -83,6 +138,9 @@ try{
     $b=@{nombre='Beto';apellido='Prueba';email='Beto.Test@example.invalid';password=$password;fechaNacimiento='1991-02-03'}
     $admin=@{nombre='Admin';apellido='Prueba';email='Admin.Test@example.invalid';password=$password;fechaNacimiento='1990-01-01'}
     foreach($account in @($a,$b,$admin)){Call POST '/api/Usuario' $account '' 202|Out-Null}
+    foreach($account in @($a,$b,$admin)){
+        Call POST '/api/Usuario/email/confirmar' @{email=$account.email;password=$password;codigo=(CuentaCodigo $account.email 'email_verificacion')} '' 204 | Out-Null
+    }
     $duplicate=$a.Clone();$duplicate.email=$a.email.ToLowerInvariant()
     Call POST '/api/Usuario' $duplicate '' 202|Out-Null
     Assert ((Sql 'SELECT count(*) FROM public.usuarios') -eq '3') 'Se duplicó una cuenta.'
@@ -135,6 +193,7 @@ try{
     $at=(Json (Call POST '/api/Usuario/login' @{email=$admin.email;password=$password} '' 200)).token
     Call POST '/api/Departamento' '"Departamento admin"' $at 200|Out-Null
     . (Join-Path $PSScriptRoot 'verify-encuesta-cases.ps1')
+    . (Join-Path $PSScriptRoot 'verify-encuesta-cierre-cases.ps1')
     $emptyAffiliations=Json (Call GET '/api/SolicitudAfiliacion/totales' $null $at 200)
     Assert ($emptyAffiliations.totalAfiliados -eq 0 -and $emptyAffiliations.totalSolicitudes -eq 0) 'Los totales vacíos no son cero.'
     Call POST '/api/Sede' @{nombre='Sede test';direccion='Direccion original'} $at 200|Out-Null
@@ -175,7 +234,10 @@ try{
     Call POST '/api/Usuario/me/afiliacion' @{confirmacion=$true;estado='aprobada'} $ta 400|Out-Null
     ConcurrentPost '/api/Usuario/me/afiliacion' @{confirmacion=$true} $ta
     Assert ((Sql "SELECT count(*) FROM public.solicitudes_afiliacion WHERE usuario_id='$ida'") -eq '1') 'Afiliación duplicada.'
-    Sql "UPDATE public.solicitudes_afiliacion SET estado='rechazada' WHERE usuario_id='$ida';"|Out-Null
+    Sql "UPDATE public.usuarios SET rol_id=(SELECT id FROM public.roles WHERE nombre='Admin') WHERE email='Admin.Test@example.invalid';"|Out-Null
+    $at=(Json (Call POST '/api/Usuario/login' @{email=$admin.email;password=$password} '' 200)).token
+    $initialAff=Sql "SELECT id FROM public.solicitudes_afiliacion WHERE usuario_id='$ida'"
+    Call POST "/api/SolicitudAfiliacion/$initialAff/rechazar" @{motivo='Solicitud de prueba cerrada por el administrador.'} $at 204|Out-Null
     Call POST '/api/Usuario/me/afiliacion' @{confirmacion=$true} $ta 409|Out-Null
     Call POST '/api/Usuario/me/afiliacion' @{confirmacion=$true} $tb 201|Out-Null
     Call POST '/api/Usuario/me/solicitudes' @{motivo='duda';mensaje='Una duda de prueba para el partido.'} $ta 201|Out-Null
@@ -187,6 +249,11 @@ try{
     . (Join-Path $PSScriptRoot 'verify-afiliacion-cases.ps1')
     . (Join-Path $PSScriptRoot 'verify-noticia-cases.ps1')
     . (Join-Path $PSScriptRoot 'verify-notificacion-cases.ps1')
+    . (Join-Path $PSScriptRoot 'verify-afiliacion-cierre-cases.ps1')
+    . (Join-Path $PSScriptRoot 'verify-consumo-cases.ps1')
+    . (Join-Path $PSScriptRoot 'verify-geografia-cases.ps1')
+    . (Join-Path $PSScriptRoot 'verify-solicitud-idempotencia-cases.ps1')
+    . (Join-Path $PSScriptRoot 'verify-cuenta-cases.ps1')
     for($i=0;$i -lt 5;$i++){Call POST '/api/Usuario/login' @{email=$b.email;password='Wrong-password-123'} '' 401|Out-Null}
     Call POST '/api/Usuario/login' @{email=$b.email;password=$password} '' 401|Out-Null
     Assert ((Sql "SELECT intentos_fallidos FROM public.usuarios WHERE id='$idb'") -eq '5') 'Contador incorrecto.'
@@ -212,7 +279,10 @@ try{
     Call POST '/api/Usuario' @{} '' 429|Out-Null
     1..2|ForEach-Object{Call PATCH '/api/Usuario/me' @{nombre='Beto'} $tb 204|Out-Null}
     Call PATCH '/api/Usuario/me' @{nombre='Beto'} $tb 429|Out-Null
-    Write-Output "OK: $script:checks comprobaciones de Usuario, Encuesta, Solicitud ciudadana, Afiliacion, Noticias y Notificaciones. Base temporal: $db"
+    Call POST '/api/Departamento' '"No debe crearse"' $at 429|Out-Null
+    Call POST "/api/Ciudad?nombre=NoCrear&departamentoId=$catalogDepartment" $null $at 429|Out-Null
+    Call POST "/api/SolicitudAfiliacion/$initialAff/rechazar" @{motivo='No debe modificar el expediente.'} $at 429|Out-Null
+    Write-Output "OK: $script:checks comprobaciones de Usuario, Encuesta, Solicitud ciudadana, Afiliacion, Noticias, Notificaciones y Geografia. Base temporal: $db"
 }finally{
     StopApi
     foreach($key in $old.Keys){[Environment]::SetEnvironmentVariable($key,$old[$key])}

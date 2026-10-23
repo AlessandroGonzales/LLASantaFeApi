@@ -31,6 +31,7 @@ namespace Infrastructure.Repositories
             var efCiudades = await _db.Ciudades
                 .AsNoTracking()
                 .Where(c => c.DepartamentoId == departamentoId)
+                .OrderBy(c => c.Nombre).ThenBy(c => c.Id)
                 .Select(c => new Ciudade
                 {
                     Id = c.Id,

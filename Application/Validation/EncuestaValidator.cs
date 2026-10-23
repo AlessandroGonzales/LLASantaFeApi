@@ -30,8 +30,7 @@ public static class EncuestaValidator
             if (System.Text.Encoding.UTF8.GetByteCount(configuration) > 32768) throw new JsonException();
             config = JsonSerializer.Deserialize<Config>(configuration, Options) ?? throw new JsonException();
             if (config.Version != 1 || config.Preguntas is null || config.Preguntas.Count is < 1 or > 50 ||
-                config.Preguntas.Any(p => p is null || string.IsNullOrWhiteSpace(p.Id) || p.Id.Length > 64 ||
-                    string.IsNullOrWhiteSpace(p.Texto) || p.Texto.Length > 500 ||
+                config.Preguntas.Any(p => p is null || !TextoValido(p.Id, 64) || !TextoValido(p.Texto, 500) ||
                     p.Tipo is not ("opcion_unica" or "opcion_multiple" or "texto" or "numero")) ||
                 config.Preguntas.Select(p => p.Id).Distinct(StringComparer.Ordinal).Count() != config.Preguntas.Count)
                 throw new JsonException();
@@ -44,8 +43,7 @@ public static class EncuestaValidator
                 if (p.Tipo is "opcion_unica" or "opcion_multiple")
                 {
                     if (p.Opciones is null || p.Opciones.Count is < 2 or > 20 ||
-                        p.Opciones.Any(o => o is null || string.IsNullOrWhiteSpace(o.Id) || o.Id.Length > 64 ||
-                            string.IsNullOrWhiteSpace(o.Texto) || o.Texto.Length > 300) ||
+                        p.Opciones.Any(o => o is null || !TextoValido(o.Id, 64) || !TextoValido(o.Texto, 300)) ||
                         p.Opciones.Select(o => o.Id).Distinct(StringComparer.Ordinal).Count() != p.Opciones.Count)
                         throw new JsonException();
                 }
@@ -68,23 +66,33 @@ public static class EncuestaValidator
             var valid = p.Tipo switch
             {
                 "texto" => value.ValueKind == JsonValueKind.String &&
-                    !string.IsNullOrWhiteSpace(value.GetString()) && value.GetString()!.Length <= (p.MaxLongitud ?? 2000),
+                    TextoValido(ReadText(value), p.MaxLongitud ?? 2000),
                 "numero" => value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var n) &&
                     (p.Min is null || n >= p.Min) && (p.Max is null || n <= p.Max),
-                "opcion_unica" => value.ValueKind == JsonValueKind.String && p.Opciones!.Any(o => o.Id == value.GetString()),
+                "opcion_unica" => value.ValueKind == JsonValueKind.String && p.Opciones!.Any(o => o.Id == ReadText(value)),
                 "opcion_multiple" => MultipleIsValid(value, p.Opciones!),
                 _ => false
             };
             if (!valid) throw InvalidAnswer();
         }
-        return JsonSerializer.Serialize(answers);
+        var json = JsonSerializer.Serialize(answers);
+        if (System.Text.Encoding.UTF8.GetByteCount(json) > 65536) throw InvalidAnswer();
+        return json;
+    }
+    private static bool TextoValido(string? value, int max) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= max && !value.Contains('\0');
+    private static string? ReadText(JsonElement value)
+    {
+        // GetString rechaza escapes UTF-16 incompletos aunque el JSON ya haya sido leído.
+        try { return value.GetString(); }
+        catch (InvalidOperationException) { throw InvalidAnswer(); }
     }
     private static bool MultipleIsValid(JsonElement value, List<Opcion> options)
     {
         if (value.ValueKind != JsonValueKind.Array || value.GetArrayLength() is < 1 or > 20) return false;
         var selected = new HashSet<string>(StringComparer.Ordinal);
         return value.EnumerateArray().All(v => v.ValueKind == JsonValueKind.String &&
-            options.Any(o => o.Id == v.GetString()) && selected.Add(v.GetString()!));
+            options.Any(o => o.Id == ReadText(v)) && selected.Add(ReadText(v)!));
     }
     private static BusinessException InvalidAnswer() => new("validation", "Las respuestas no corresponden a las preguntas, opciones o límites de la encuesta.");
     private sealed class Config

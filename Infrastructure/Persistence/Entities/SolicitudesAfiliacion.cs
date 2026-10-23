@@ -8,6 +8,9 @@ public partial class SolicitudesAfiliacion
     public Guid Id { get; set; }
     public DateTime? AprobadaAt { get; set; }
     public Guid? AprobadaPor { get; set; }
+    public DateTime? RechazadaAt { get; set; }
+    public Guid? RechazadaPor { get; set; }
+    public string? MotivoRechazo { get; set; }
 
     public Guid UsuarioId { get; set; }
 

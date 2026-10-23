@@ -1,10 +1,12 @@
 # Solicitud ciudadana y PDF
 
+Actualización del paso 4 (20 de octubre de 2026): ver [idempotencia y recuperación del flujo JSON/PDF](solicitud-ciudadana-idempotencia.md) para `Idempotency-Key`, respuestas 201/200/409 y metadatos del adjunto.
+
 ## Antes de probar
 
-1. Detener la API y ejecutar una vez `database/004_solicitudes_ciudadanas.sql`,
-   después de 001–003. No fue aplicado a la base habitual. Los mapeos ya están
-   actualizados; no hace falta scaffolding.
+1. La API actual requiere 001–008 en orden. Si ya están 001–007, detener la API
+   y ejecutar una vez `database/008_solicitudes_idempotencia.sql`.
+   No reejecutar migraciones aplicadas. No hace falta scaffolding.
 2. Iniciar Presentation en Debug. La creación de texto y la gestión funcionan
    independientemente del antivirus.
 3. Para adjuntar PDF hace falta un servicio **ClamAV/clamd real**, con firmas
@@ -46,6 +48,7 @@ Motivos permitidos: `proyecto`, `sugerencia`, `duda`, `voluntariado`, `denuncia`
 El mensaje tiene entre 10 y 5000 caracteres. No se admiten usuarioId, estado,
 aceptacion ni pdfUrl enviados por el cliente. Se devuelve 201 con el ID y el
 estado `recibida` del acuse; en el expediente se representa como `pendiente`.
+Con clave de idempotencia, la repetición de datos confirmados devuelve 200 y el mismo acuse sin consumir otro cupo. Sin clave conserva el comportamiento anterior.
 El endpoint anterior `POST /api/Usuario/me/solicitudes` sigue disponible y aplica
 las mismas cuotas, porque se controlan al insertar en PostgreSQL.
 
@@ -59,7 +62,7 @@ Opcionalmente, `POST /api/SolicitudCiudadana/{id}/pdf`, multipart/form-data:
   limpio del antivirus. El filtro de encabezado/cierre no es un parser PDF completo
   y un antivirus no garantiza que un documento sea inocuo.
 - El nombre original no se usa como ruta ni se publica. Se asigna un nombre de
-  descarga basado en el UUID. La carga devuelve 201 tras persistir el adjunto.
+  descarga basado en el UUID. La carga devuelve 201 tras persistir el adjunto; con la misma clave y bytes de un PDF confirmado devuelve 200 sin otro intento/análisis.
 
 La creación del texto es independiente de la carga: un PDF rechazado no borra
 la solicitud. No crear otra solicitud para reintentar una carga.
@@ -135,8 +138,8 @@ también antes de la API y vigilar consumo y almacenamiento.
 
 ## Pruebas
 
-`scripts/verify-usuario.ps1` aplica 001–004 sobre una base temporal y ejecuta los
-casos de `scripts/verify-solicitud-cases.ps1` junto con las regresiones previas.
+`scripts/verify-usuario.ps1` aplica 001–008 sobre una base temporal y ejecuta los
+casos de `scripts/verify-solicitud-cases.ps1` y `verify-solicitud-idempotencia-cases.ps1` junto con las regresiones previas.
 Comprueba acceso ajeno, permisos de gestión, paginación, cuotas, altas concurrentes,
 archivos sobredimensionados, múltiples archivos, formato inválido, descarga y
 rechazo/indisponibilidad del scanner.

@@ -618,10 +618,17 @@ public partial class LLASantaFeDbContext : DbContext
         {
             entity.Property(e => e.AprobadaAt).HasColumnName("aprobada_at");
             entity.Property(e => e.AprobadaPor).HasColumnName("aprobada_por");
+            entity.Property(e => e.RechazadaAt).HasColumnName("rechazada_at");
+            entity.Property(e => e.RechazadaPor).HasColumnName("rechazada_por");
+            entity.Property(e => e.MotivoRechazo).HasColumnName("motivo_rechazo");
+            entity.HasOne<Usuario>().WithMany().HasForeignKey(e => e.RechazadaPor)
+                .OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("solicitudes_afiliacion_rechazada_por_fkey");
             entity.HasIndex(e => new { e.Estado, e.Id }, "idx_afiliaciones_estado_pagina");
             entity.HasOne<Usuario>().WithMany().HasForeignKey(e => e.AprobadaPor)
                 .OnDelete(DeleteBehavior.ClientSetNull).HasConstraintName("afiliaciones_aprobada_por_fkey");
         });
+        modelBuilder.Entity<Usuario>().Property(u=>u.EmailVerificadoAt).HasColumnName("email_verificado_at");
+        modelBuilder.Entity<Usuario>().Property(u=>u.RequiereVerificarEmail).HasColumnName("requiere_verificar_email");
         OnModelCreatingPartial(modelBuilder);
     }
 

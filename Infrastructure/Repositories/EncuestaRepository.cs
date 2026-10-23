@@ -27,6 +27,9 @@ public sealed class EncuestaRepository(LLASantaFeDbContext db) : IEncuestaReposi
             DepartamentoId = e.DepartamentoId, Configuracion = e.Configuracion
         }).SingleOrDefaultAsync(ct);
 
+    public Task<bool> ExisteAsync(Guid id, CancellationToken ct) =>
+        db.Encuestas.AnyAsync(e => e.Id == id && e.DeletedAt == null, ct);
+
     public async Task<Guid> CrearAsync(EncuestaEdicion d, Guid autor, CancellationToken ct)
     {
         var id = Guid.NewGuid();

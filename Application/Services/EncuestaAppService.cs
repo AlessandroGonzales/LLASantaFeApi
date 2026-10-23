@@ -30,19 +30,25 @@ public sealed class EncuestaAppService(IEncuestaRepository encuestas, TimeProvid
     public async Task EditarAsync(Guid id, EncuestaEditarRequest request, CancellationToken ct)
     {
         var datos = Validar(request);
-        await ObtenerAsync(id, true, ct);
-        if (request.Revision < 1 || !await encuestas.EditarAsync(id, request.Revision, datos, ct)) throw Conflicto();
+        if (request.Revision < 1 || !await encuestas.EditarAsync(id, request.Revision, datos, ct))
+        {
+            await ExigirExisteAsync(id, ct);
+            throw Conflicto();
+        }
     }
     public async Task CambiarEstadoAsync(Guid id, EncuestaEstadoRequest request, bool publicar, CancellationToken ct)
     {
-        var e = await ObtenerAsync(id, true, ct);
-        if (publicar) EncuestaValidator.ValidateConfiguration(e.Configuracion);
-        if (request.Revision < 1 || !await encuestas.CambiarEstadoAsync(id, request.Revision, publicar, Hoy, ct)) throw Conflicto();
+        if (publicar) EncuestaValidator.ValidateConfiguration((await ObtenerAsync(id, true, ct)).Configuracion);
+        if (request.Revision < 1 || !await encuestas.CambiarEstadoAsync(id, request.Revision, publicar, Hoy, ct))
+        {
+            await ExigirExisteAsync(id, ct);
+            throw Conflicto();
+        }
     }
     public async Task<PaginaEncuesta<RespuestaEncuestaResponse>> RespuestasAsync(Guid id, Guid? cursor, int limite, CancellationToken ct)
     {
         ValidarLimite(limite, 20);
-        await ObtenerAsync(id, true, ct);
+        await ExigirExisteAsync(id, ct);
         var rows = await encuestas.RespuestasAsync(id, cursor, limite + 1, ct);
         return new(rows.Take(limite).Select(r => new RespuestaEncuestaResponse(r.Id,
             JsonSerializer.Deserialize<JsonElement>(r.Respuestas), r.CreatedAt)).ToArray(),
@@ -52,6 +58,7 @@ public sealed class EncuestaAppService(IEncuestaRepository encuestas, TimeProvid
     {
         UsuarioRules.Validate(r);
         if (string.IsNullOrWhiteSpace(r.Titulo) || r.Titulo.Trim().Length < 3 ||
+            r.Titulo.Contains('\0') || r.Descripcion?.Contains('\0') == true ||
             !Regex.IsMatch(r.Tipo, "^[a-z][a-z0-9_]{0,49}$", RegexOptions.CultureInvariant) ||
             r.FechaInicio > r.FechaFin || r.CiudadId == Guid.Empty || r.DepartamentoId == Guid.Empty ||
             (r.CiudadId is not null && r.DepartamentoId is not null))
@@ -62,6 +69,10 @@ public sealed class EncuestaAppService(IEncuestaRepository encuestas, TimeProvid
     private static void ValidarLimite(int limite, int max)
     {
         if (limite < 1 || limite > max) throw new BusinessException("validation", $"El límite debe estar entre 1 y {max}.");
+    }
+    private async Task ExigirExisteAsync(Guid id, CancellationToken ct)
+    {
+        if (!await encuestas.ExisteAsync(id, ct)) throw new BusinessException("not_found", "Encuesta no disponible.");
     }
     private static BusinessException Conflicto() => new("conflict", "La encuesta cambió, ya fue publicada/cerrada o sus fechas no permiten esta acción. Volvé a consultarla.");
 }

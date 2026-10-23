@@ -63,10 +63,12 @@ builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSet
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddApiRateLimits(builder.Configuration);
+builder.Services.AddPublicCatalogCache(builder.Configuration);
 builder.Services.AddScoped<PdfUploadQuotaFilter>();
 builder.Services.AddSingleton<PdfAccountRateFilter>();
 // Nunca activar SensitiveDataLogging: los errores de DB pueden involucrar datos personales.
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Critical);
+builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Critical);
 builder.Logging.AddFilter("Npgsql", LogLevel.Critical);
 builder.Logging.AddFilter("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", LogLevel.None);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -136,7 +138,13 @@ app.UseRateLimiter();
 app.Use(async (context, next) =>
 {
     context.Response.Headers.XContentTypeOptions = "nosniff";
-    context.Response.Headers.CacheControl = "no-store";
+    context.Response.OnStarting(() =>
+    {
+        if (!context.Response.Headers.ContainsKey("Cache-Control") || context.Response.StatusCode!=200 ||
+            context.Response.Headers.ContainsKey("Set-Cookie"))
+            context.Response.Headers.CacheControl="no-store";
+        return Task.CompletedTask;
+    });
     await next();
 });
 if (app.Environment.IsDevelopment())
@@ -146,5 +154,6 @@ if (app.Environment.IsDevelopment())
 }
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseOutputCache();
 app.MapControllers();
 app.Run();
